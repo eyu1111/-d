@@ -1,0 +1,296 @@
+-- 加载OrionLib库
+local OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
+
+-- 创建白名单
+local Whitelist = {
+    "Player1",  -- 替换为实际的用户名
+    "Player2",
+    "Player3",
+    "yukjm22"   -- 新增的白名单用户
+}
+
+-- 获取玩家的用户名
+local player = game.Players.LocalPlayer
+local username = player.Name
+
+-- 检查玩家是否在白名单中的函数
+local function isWhitelisted()
+    for _, v in ipairs(Whitelist) do
+        if v == username then
+            return true
+        end
+    end
+    return false
+end
+
+-- 定义最大重试次数和每次重试之间的延迟时间
+local maxRetries = 3
+local retryDelay = 2 -- 秒
+
+-- 尝试多次检测玩家是否在白名单中
+local function checkWhitelist()
+    for attempt = 1, maxRetries do
+        if isWhitelisted() then
+            return true
+        else
+            wait(retryDelay) -- 等待一段时间再重试
+        end
+    end
+    return false
+end
+
+-- 检测玩家是否在白名单中
+if not checkWhitelist() then
+    player:Kick("你不在白名单中，无法使用此脚本。\n如有疑问，请联系3291165933。")
+    return -- 停止脚本执行
+end
+
+-- 获取北京时间
+local function getBeijingTime()
+    local time = os.time() + 8 * 60 * 60  -- 将UTC时间调整为UTC+8（北京时间）
+    return os.date("%Y-%m-%d %H:%M:%S", time)  -- 格式化为 "年-月-日 时:分:秒"
+end
+
+-- 在右下角生成一个欢迎通知，并显示北京时间和脚本制作时间
+OrionLib:MakeNotification({
+    Name = "欢迎使用",
+    Content = "欢迎使用定制脚本，用户RBT\n北京时间: " .. getBeijingTime() .. "\n脚本制作时间: 2024年八月三十一日",
+    Image = "rbxassetid://4483345998", -- 可替换为你想要的图标ID
+    Time = 10  -- 通知持续时间（秒）
+})
+
+-- 创建主窗口
+local Window = OrionLib:MakeWindow({Name = "鳄小想", HidePremium = false, SaveConfig = true, ConfigFolder = "ATMControl"})
+
+-- 添加一个主页面（选项卡）
+local MainTab = Window:MakeTab({
+    Name = "鳄小想",
+    Icon = "rbxassetid://4483345998",  -- 可以替换为你想要的图标ID
+    PremiumOnly = false
+})
+
+-- 添加一个传送页面（选项卡）
+local TeleportTab = Window:MakeTab({
+    Name = "传送地点",
+    Icon = "rbxassetid://4483345998",  -- 可以替换为你想要的图标ID
+    PremiumOnly = false
+})
+
+-- 变量来控制UI是否可见
+local isMinimized = false
+
+-- 创建一个输入框以允许用户输入金额
+local AmountInput
+MainTab:AddTextbox({
+    Name = "输入金额",
+    Default = "",
+    TextDisappear = false,
+    Callback = function(value)
+        AmountInput = tonumber(value)  -- 保存用户输入的数值
+    end
+})
+
+-- 创建提款按钮
+MainTab:AddButton({
+    Name = "提款",
+    Callback = function()
+        if AmountInput and AmountInput > 0 then
+            local args = {[1] = AmountInput}
+            game:GetService("ReplicatedStorage").ATMWithdraw:FireServer(unpack(args))
+            print("已提款: " .. AmountInput)
+        else
+            print("请输入有效的金额")
+        end
+    end    
+})
+
+-- 创建存款按钮
+MainTab:AddButton({
+    Name = "存款",
+    Callback = function()
+        if AmountInput and AmountInput > 0 then
+            local args = {[1] = AmountInput}
+            game:GetService("ReplicatedStorage").ATMDeposit:FireServer(unpack(args))
+            print("已存款: " .. AmountInput)
+        else
+            print("请输入有效的金额")
+        end
+    end    
+})
+
+-- 穿墙状态变量
+local noclipEnabled = false
+
+-- 创建穿墙按钮
+MainTab:AddButton({
+    Name = "穿墙 开/关",
+    Callback = function()
+        noclipEnabled = not noclipEnabled
+        if noclipEnabled then
+            local connection
+            connection = game:GetService("RunService").Stepped:Connect(function()
+                if noclipEnabled then
+                    for _, v in pairs(player.Character:GetDescendants()) do
+                        if v:IsA("BasePart") and v.CanCollide then
+                            v.CanCollide = false
+                        end
+                    end
+                else
+                    connection:Disconnect()
+                end
+            end)
+            print("穿墙 已启用")
+        else
+            for _, v in pairs(player.Character:GetDescendants()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = true
+                end
+            end
+            print("穿墙 已禁用")
+        end
+    end    
+})
+
+-- 创建速度输入框
+MainTab:AddTextbox({
+    Name = "设置速度",
+    Default = "16",  -- 默认速度
+    TextDisappear = false,
+    Callback = function(value)
+        local speed = tonumber(value)
+        if speed and player.Character and player.Character:FindFirstChild("Humanoid") then
+            player.Character.Humanoid.WalkSpeed = speed
+            print("玩家速度已设置为: " .. speed)
+        else
+            print("请输入有效的速度值")
+        end
+    end
+})
+
+-- 自动移动状态变量
+local autoMoveEnabled = false
+local moveCoroutine
+
+-- 创建状态提示标签
+local moveStatusLabel = MainTab:AddLabel("自动移动状态: 暂停")
+
+-- 自动移动功能
+local function autoMove()
+    local character = player.Character or player.CharacterAdded:Wait() -- 获取玩家角色
+
+    -- 定义目标位置
+    local firstTargetPosition = Vector3.new(3.5719141960144043, 267.2689208984375, -1487.02294921875)
+    local secondTargetPosition = Vector3.new(1721.8359375, 45.6075439453125, -258.0606689453125)
+
+    while autoMoveEnabled do
+        -- 移动到第一个目标位置
+        character:SetPrimaryPartCFrame(CFrame.new(firstTargetPosition))
+        wait(3) -- 等待3秒
+
+        -- 移动到第二个目标位置
+        character:SetPrimaryPartCFrame(CFrame.new(secondTargetPosition))
+        wait(10) -- 等待10秒
+    end
+end
+
+-- 创建自动移动按钮
+MainTab:AddButton({
+    Name = "自动移动 开/关",
+    Callback = function()
+        autoMoveEnabled = not autoMoveEnabled
+        if autoMoveEnabled then
+            moveStatusLabel:Set("自动移动状态: 启动")
+            moveCoroutine = coroutine.create(autoMove)
+            coroutine.resume(moveCoroutine)
+            print("自动移动已启动")
+        else
+            moveStatusLabel:Set("自动移动状态: 暂停")
+            print("自动移动已暂停")
+        end
+    end
+})
+
+-- 透视所有玩家并显示距离和生命值
+MainTab:AddButton({
+    Name = "透视玩家",
+    Callback = function()
+        for _, targetPlayer in pairs(game.Players:GetPlayers()) do
+            if targetPlayer ~= player then
+                local character = targetPlayer.Character
+                if character then
+                    local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+                    local humanoid = character:FindFirstChildOfClass("Humanoid")
+                    
+                    if humanoidRootPart and humanoid then
+                        local billboardGui = Instance.new("BillboardGui")
+                        local textLabel = Instance.new("TextLabel")
+                        
+                        billboardGui.Name = "PlayerESP"
+                        billboardGui.Adornee = humanoidRootPart
+                        billboardGui.Size = UDim2.new(0, 200, 0, 50)
+                        billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+                        billboardGui.AlwaysOnTop = true
+                        
+                        textLabel.Parent = billboardGui
+                        textLabel.Size = UDim2.new(1, 0, 1, 0)
+                        textLabel.BackgroundTransparency = 1
+                        textLabel.TextColor3 = Color3.fromRGB(255, 0, 0)  -- 设置文本颜色为红色
+                        textLabel.TextStrokeTransparency = 0.5
+                        textLabel.TextScaled = true
+                        
+                        billboardGui.Parent = humanoidRootPart
+                        
+                        game:GetService("RunService").Stepped:Connect(function()
+                            if character and humanoidRootPart and humanoid then
+                                local distance = (player.Character.HumanoidRootPart.Position - humanoidRootPart.Position).magnitude
+                                textLabel.Text = string.format("%s\n距离: %.1f\n生命值: %.0f", targetPlayer.Name, distance, humanoid.Health)
+                            else
+                                billboardGui:Destroy()
+                            end
+                        end)
+                    end
+                end
+            end
+        end
+        print("透视功能已启用")
+    end    
+})
+
+-- 添加传送地点列表
+local TeleportLocations = {
+    ["人民影剧院"] = Vector3.new(6170.08, -110.80, -398.30),
+    ["拳击馆"] = Vector3.new(958.74, -96.90, -680.78),
+    ["顺天出租车有限公司大门"] = Vector3.new(985.56, 45.18, -41.06),
+    ["大酒店"] = Vector3.new(570.13, 51.82, -1014.36),
+    ["公寓"] = Vector3.new(1506.19, 45.70, -886.83),
+    ["下水道"] = Vector3.new(2407.21, -75.69, -1543.95)
+}
+
+-- 变量来保存当前选择的传送地点
+local selectedLocation = nil
+
+-- 在传送地点选项卡下添加传送地点的下拉菜单
+TeleportTab:AddDropdown({
+    Name = "选择传送地点",
+    Default = "请选择一个地点",
+    Options = {"人民影剧院", "拳击馆", "顺天出租车有限公司大门", "大酒店", "公寓", "下水道"},  -- 填入传送地点的名字
+    Callback = function(option)
+        selectedLocation = TeleportLocations[option]  -- 保存用户选择的位置
+        print("已选择传送地点: " .. option)
+    end,
+    TextColor = Color3.fromRGB(255, 0, 0)  -- 设置文本颜色为红色
+})
+
+-- 在传送地点选项卡下添加传送按钮
+TeleportTab:AddButton({
+    Name = "传送",
+    Callback = function()
+        if selectedLocation then
+            player.Character:SetPrimaryPartCFrame(CFrame.new(selectedLocation))
+            print("玩家已传送到: " .. tostring(selectedLocation))
+        else
+            print("请先选择一个传送地点")
+        end
+    end,
+    TextColor = Color3.fromRGB(255, 0, 0)  -- 设置文本颜色为红色
+})
