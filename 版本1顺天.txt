@@ -1,3 +1,4 @@
+
 local OrionLib
 local success, err = pcall(function()
     OrionLib = loadstring(game:HttpGet(('https://raw.githubusercontent.com/shlexware/Orion/main/source')))()
@@ -11,6 +12,8 @@ end
 local Whitelist = {
     "5t6wdi5kfa0t01vmv8u8",
     "cwh1npbxkpn596x9xl7w",
+    "5t6wdi5kfa0t01vmv8u8",
+    "andelie",
     "yukjm2",
     "yukjm22"
 }
